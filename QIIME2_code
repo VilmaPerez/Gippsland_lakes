@@ -1,0 +1,402 @@
+conda activate qiime2-2021.4
+
+############# IMPORTING THE DATA ################
+
+biom convert -i samples-Taxonomy.biom -o samples.txt --to-tsv 
+
+# remove the first row and then change "OTU ID" to "Feature ID". 
+
+# convert text file back into the hdf5 biom format 
+
+biom convert -i samples.txt  -o samples_hdf5.biom --table-type="OTU table" --to-hdf5
+
+# convert biom table into a qiime 2 artifact. 
+
+qiime tools import \
+--input-path samples_hdf5.biom \
+--type 'FeatureTable[Frequency]' \
+--input-format BIOMV210Format \
+--output-path samples_hdf5_QIIME2.qza
+
+# summarise
+
+qiime feature-table summarize \
+  --i-table samples_hdf5_QIIME2.qza \
+  --o-visualization samples_hdf5_QIIME2.qzv \
+  --m-sample-metadata-file samples-metadata.txt
+
+
+#From Biom file create a taxonomy file. Save in the first column the taxa ID and in the second the taxon path. Save it as Tab-delimited file. Now import ii into qiime2. 
+
+qiime tools import \
+     --type 'FeatureData[Taxonomy]' \
+     --input-format HeaderlessTSVTaxonomyFormat \
+     --input-path taxonomy.txt \
+     --output-path oficialtaxonomy.qza
+
+qiime metadata tabulate \
+  	--m-input-file oficialtaxonomy.qza \
+  	--o-visualization oficialtaxonomy.qzv
+
+############## REMOVE CONTAMINANTS  ############ 
+
+#To remove the species of EBC from the Samples
+
+# created a txt file with the FeatureID (first column - add contaminants list into first column) and Frequency (second column - will be empty), name of the file is Contaminants.txt
+
+qiime feature-table filter-features \
+ --i-table samples_hdf5_QIIME2.qza \
+ --m-metadata-file Contaminants.txt \
+ --p-exclude-ids \
+ --o-filtered-table samples_hdf5_QIIME2_decontamFilter.qza
+
+#summarise 
+
+qiime feature-table summarize \
+--i-table samples_hdf5_QIIME2_decontamFilter.qza \
+--o-visualization samples_hdf5_QIIME2_decontamFilter.qzv \
+  --m-sample-metadata-file samples-metadata.txt
+   
+
+######### REMOVAL OF SINGLETON #######################
+
+# filter out features with less than 2 reads 
+
+qiime feature-table filter-features \
+  --i-table samples_hdf5_QIIME2_decontamFilter.qza \
+  --p-min-frequency 2 \
+  --o-filtered-table samples_hdf5_QIIME2_decontam_2FreqFilter.qza
+
+#summarise 
+
+qiime feature-table summarize \
+--i-table samples_hdf5_QIIME2_decontam_2FreqFilter.qza \
+--o-visualization samples_hdf5_QIIME2_decontam_2FreqFilter.qzv \
+  --m-sample-metadata-file samples-metadata.txt
+
+#################### SEPARATE BY LAKE ###################
+
+#VICTORIA 
+
+qiime feature-table filter-samples \
+--i-table samples_hdf5_QIIME2_decontam_2FreqFilter.qza \
+  --m-metadata-file samples-metadata.txt \
+  --p-where "Site='Victoria'" \
+--o-filtered-table samples_hdf5_QIIME2_decontam_2FreqFilter_Victoria.qza
+
+#visualize table 
+
+qiime feature-table summarize \
+--i-table samples_hdf5_QIIME2_decontam_2FreqFilter_Victoria.qza \
+--o-visualization samples_hdf5_QIIME2_decontam_2FreqFilter_Victoria.qzv \
+  --m-sample-metadata-file samples-metadata.txt
+
+#KING
+
+qiime feature-table filter-samples \
+--i-table samples_hdf5_QIIME2_decontam_2FreqFilter.qza \
+  --m-metadata-file samples-metadata.txt \
+  --p-where "Site='King_North'" \
+--o-filtered-table samples_hdf5_QIIME2_decontam_2FreqFilter_King.qza
+
+#visualize table 
+
+qiime feature-table summarize \
+--i-table samples_hdf5_QIIME2_decontam_2FreqFilter_King.qza \
+--o-visualization samples_hdf5_QIIME2_decontam_2FreqFilter_King.qzv \
+  --m-sample-metadata-file samples-metadata.txt
+
+
+###### ALPHA RAREFACTION CURVES ######
+
+# I used mean frequency for max depth
+
+qiime diversity alpha-rarefaction \
+  --i-table samples_hdf5_QIIME2_decontam_2FreqFilter_Victoria.qza \
+   --p-max-depth 9291 \
+  --m-metadata-file samples-metadata.txt \
+  --o-visualization alpha-rarefaction_mean_V.qzv
+
+qiime diversity alpha-rarefaction \
+  --i-table samples_hdf5_QIIME2_decontam_2FreqFilter_King.qza \
+   --p-max-depth 22389 \
+  --m-metadata-file samples-metadata.tXT \
+  --o-visualization alpha-rarefaction_mean_K.qzv
+
+
+##### REMOVE SAMPLES THAT HAVE LESS THAT OUR DEPTH CALCULATED IN THE RAREFACTION#####
+
+qiime feature-table filter-samples \
+  --i-table samples_hdf5_QIIME2_decontam_2FreqFilter_Victoria.qza \
+  --p-min-frequency 5000 \
+  --o-filtered-table samples_hdf5_QIIME2_decontam_2FreqFilter_Victoria_rareremoved.qza
+   
+qiime feature-table summarize \
+--i-table samples_hdf5_QIIME2_decontam_2FreqFilter_Victoria_rareremoved.qza \
+--o-visualization samples_hdf5_QIIME2_decontam_2FreqFilter_Victoria_rareremoved.qzv \
+  --m-sample-metadata-file samples-metadata.txt
+
+qiime feature-table filter-samples \
+  --i-table samples_hdf5_QIIME2_decontam_2FreqFilter_King.qza \
+  --p-min-frequency 5000 \
+  --o-filtered-table samples_hdf5_QIIME2_decontam_2FreqFilter_King_rareremoved.qza
+   
+qiime feature-table summarize \
+--i-table samples_hdf5_QIIME2_decontam_2FreqFilter_King_rareremoved.qza \
+--o-visualization samples_hdf5_QIIME2_decontam_2FreqFilter_King_rareremoved.qzv \
+  --m-sample-metadata-file samples-metadata.txt
+
+############## ALPHA AND BETA DIVERSITY  ############
+
+qiime diversity core-metrics \
+  --i-table samples_hdf5_QIIME2_decontam_2FreqFilter_King_rareremoved.qza \
+  --p-sampling-depth 5000 \
+  --m-metadata-file samples-metadata.txt  \
+  --output-dir core-metrics-results-King_5000rare
+  
+qiime metadata tabulate \
+  --m-input-file core-metrics-results-King_5000rare/observed_features_vector.qza \
+  --o-visualization core-metrics-results-King_5000rare/observed_features_vector.qzv
+
+qiime metadata tabulate \
+  --m-input-file core-metrics-results-King_5000rare/shannon_vector.qza \
+  --o-visualization core-metrics-results-King_5000rare/shannon_vector.qzv
+
+qiime diversity alpha-group-significance \
+ --i-alpha-diversity core-metrics-results-King_5000rare/observed_features_vector.qza  \
+  --m-metadata-file samples-metadata.txt  \
+  --o-visualization core-metrics-results-King_5000rare/observed_features_vector_significance.qza
+
+qiime diversity alpha-group-significance \
+ --i-alpha-diversity core-metrics-results-King_5000rare/shannon_vector.qza \
+  --m-metadata-file samples-metadata.txt  \
+  --o-visualization core-metrics-results-King_5000rare/shannon_vector_significance.qzv
+
+
+qiime diversity core-metrics \
+  --i-table samples_hdf5_QIIME2_decontam_2FreqFilter_Victoria.qza \
+  --p-sampling-depth 5000 \
+  --m-metadata-file samples-metadata.txt  \
+  --output-dir core-metrics-results-victoria_5000rare
+  
+qiime metadata tabulate \
+  --m-input-file core-metrics-results-victoria_5000rare/observed_features_vector.qza \
+  --o-visualization core-metrics-results-victoria_5000rare/observed_features_vector.qzv
+
+qiime metadata tabulate \
+  --m-input-file core-metrics-results-victoria_5000rare/shannon_vector.qza \
+  --o-visualization core-metrics-results-victoria_5000rare/shannon_vector.qzv
+
+qiime diversity alpha-group-significance \
+ --i-alpha-diversity core-metrics-results-victoria_5000rare/observed_features_vector.qza  \
+  --m-metadata-file samples-metadata.txt  \
+  --o-visualization core-metrics-results-victoria_5000rare/observed_features_vector_significance.qza
+
+qiime diversity alpha-group-significance \
+ --i-alpha-diversity core-metrics-results-victoria_5000rare/shannon_vector.qza \
+  --m-metadata-file samples-metadata.txt  \
+  --o-visualization core-metrics-results-victoria_5000rare/shannon_vector_significance.qzv
+
+  # Calculate alpha diversity correlation with continuous dataset
+   qiime diversity alpha-correlation \
+      --i-alpha-diversity core-metrics-results-victoria_5000rare/observed_features_vector.qza  \
+      --m-metadata-file samples-metadata.txt \
+      --o-visualization core-metrics-results-victoria_5000rare/observed_alpha_correlation.qzv
+
+   qiime diversity alpha-correlation \
+      --i-alpha-diversity core-metrics-results-victoria_5000rare/shannon_vector.qza \
+      --m-metadata-file samples-metadata.txt \
+      --o-visualization core-metrics-results-victoria_5000rare/shannon_alpha_correlation.qzv
+
+qiime diversity alpha-correlation \
+      --i-alpha-diversity core-metrics-results-King_5000rare/observed_features_vector.qza  \
+      --m-metadata-file samples-metadata.txt \
+      --o-visualization core-metrics-results-King_5000rare/observed_alpha_correlation.qzv
+
+   qiime diversity alpha-correlation \
+      --i-alpha-diversity core-metrics-results-King_5000rare/shannon_vector.qza \
+      --m-metadata-file samples-metadata.txt \
+      --o-visualization core-metrics-results-King_5000rare/shannon_alpha_correlation.qzv
+
+
+######### Beta-diversity significance: PERMANOVA ##########
+
+#Era Victoria
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results-victoria_5000rare/bray_curtis_distance_matrix.qza \
+  --m-metadata-file samples-metadata.txt \
+  --m-metadata-column Era \
+  --o-visualization core-metrics-results-victoria_5000rare/bray_curtis_Era-significance.qzv
+
+#Era King
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results-King_5000rare/bray_curtis_distance_matrix.qza \
+  --m-metadata-file samples-metadata.txt \
+  --m-metadata-column Era \
+  --o-visualization core-metrics-results-King_5000rare/bray_curtis_Era-significance.qzv
+
+#Depth Victoria
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results-victoria_5000rare/bray_curtis_distance_matrix.qza \
+  --m-metadata-file samples-metadata.txt \
+  --m-metadata-column depth \
+  --o-visualization core-metrics-results-victoria_5000rare/bray_curtis_depth-significance.qzv
+
+#Depth King
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results-King_5000rare/bray_curtis_distance_matrix.qza \
+  --m-metadata-file samples-metadata.txt \
+  --m-metadata-column depth \
+  --o-visualization core-metrics-results-King_5000rare/bray_curtis_depth-significance.qzv
+
+#fragment size Victoria
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results-victoria_5000rare/bray_curtis_distance_matrix.qza \
+  --m-metadata-file samples-metadata.txt \
+  --m-metadata-column fragment_size \
+  --o-visualization core-metrics-results-victoria_5000rare/bray_curtis_fragmsize-significance.qzv
+
+#fragment size King
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results-King_5000rare/bray_curtis_distance_matrix.qza \
+  --m-metadata-file samples-metadata.txt \
+  --m-metadata-column fragment_size \
+  --o-visualization core-metrics-results-King_5000rare/bray_curtis_fragmsize-significance.qzv
+
+
+############## Pairwise PERMANOVA ##########
+
+#Era Victoria
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results-victoria_5000rare/bray_curtis_distance_matrix.qza \
+  --m-metadata-file samples-metadata.txt \
+  --m-metadata-column Era \
+  --o-visualization core-metrics-results-victoria_5000rare/bray_curtis_Era-paiwise-significance.qzv \
+  --p-pairwise
+
+#Era King
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results-King_5000rare/bray_curtis_distance_matrix.qza \
+  --m-metadata-file samples-metadata.txt \
+  --m-metadata-column Era \
+  --o-visualization core-metrics-results-King_5000rare/bray_curtis_Era-pairwise-significance.qzv \
+  --p-pairwise
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results-King_5000rare/bray_curtis_distance_matrix.qza \
+  --m-metadata-file samples-metadata.txt \
+  --m-metadata-column Era \
+  --o-visualization core-metrics-results-King_5000rare/bray_curtis_Era-permdisp-significance.qzv \
+  --p-method permdisp
+
+#Depth Victoria
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results-victoria_5000rare/bray_curtis_distance_matrix.qza \
+  --m-metadata-file samples-metadata.txt \
+  --m-metadata-column depth \
+  --o-visualization core-metrics-results-victoria_5000rare/bray_curtis_depth-pairwise-significance.qzv \
+  --p-pairwise
+
+#Depth King
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results-King_5000rare/bray_curtis_distance_matrix.qza \
+  --m-metadata-file samples-metadata.txt \
+  --m-metadata-column depth \
+  --o-visualization core-metrics-results-King_5000rare/bray_curtis_depth-pairwise-significance.qzv \
+  --p-pairwise
+
+#fragment size Victoria
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results-victoria_5000rare/bray_curtis_distance_matrix.qza \
+  --m-metadata-file samples-metadata.txt \
+  --m-metadata-column fragment_size \
+  --o-visualization core-metrics-results-victoria_5000rare/bray_curtis_fragmsize-paiwise-significance.qzv \
+  --p-pairwise
+
+#fragment size King
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results-King_5000rare/bray_curtis_distance_matrix.qza \
+  --m-metadata-file samples-metadata.txt \
+  --m-metadata-column fragment_size \
+  --o-visualization core-metrics-results-King_5000rare/bray_curtis_fragmsize-pairwise-significance.qzv \
+  --p-pairwise
+
+
+########### ADONIS ###################
+
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results-King_5000rare/bray_curtis_distance_matrix.qza \
+  --m-metadata-file samples-metadata.txt \
+  --o-visualization core-metrics-results-King_5000rare/bray_curtis_adonis_all_plus.qzv \
+  --p-formula Era+depth+fragment_size+d15N+d13C+C_to_N_ratio+N+C
+
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results-victoria_5000rare/bray_curtis_distance_matrix.qza \
+  --m-metadata-file samples-metadata.txt \
+  --o-visualization core-metrics-results-victoria_5000rare/bray_curtis_adonis_all_plus.qzv \
+  --p-formula Era+depth+fragment_size+d15N+d13C+C_to_N_ratio+N+C
+
+############## ANCOM ##################
+
+#KING
+
+qiime composition add-pseudocount \
+  --i-table samples_hdf5_QIIME2_decontam_2FreqFilter_King.qza \
+  --o-composition-table comp-samples_hdf5_QIIME2_decontam_2FreqFilter_King.qza
+  
+qiime composition ancom \
+  --i-table comp-samples_hdf5_QIIME2_decontam_2FreqFilter_King.qza \
+  --m-metadata-file samples-metadata.txt \
+  --m-metadata-column 'Era' \
+  --o-visualization ancom-Era_king.qzv
+ 
+qiime composition ancom \
+  --i-table comp-samples_hdf5_QIIME2_decontam_2FreqFilter_King.qza \
+  --m-metadata-file samples-metadata.txt \
+  --m-metadata-column 'depth' \
+  --o-visualization ancom-depth_king.qzv
+
+qiime composition ancom \
+  --i-table comp-samples_hdf5_QIIME2_decontam_2FreqFilter_King.qza \
+  --m-metadata-file samples-metadata.txt \
+  --m-metadata-column 'fragment_size' \
+  --o-visualization ancom-fragment_size_king.qzv
+
+#Victoria
+
+qiime composition add-pseudocount \
+  --i-table samples_hdf5_QIIME2_decontam_2FreqFilter_Victoria.qza \
+  --o-composition-table comp-samples_hdf5_QIIME2_decontam_2FreqFilter_Victoria.qza
+  
+qiime composition ancom \
+  --i-table comp-samples_hdf5_QIIME2_decontam_2FreqFilter_Victoria.qza \
+  --m-metadata-file samples-metadata.txt \
+  --m-metadata-column 'Era' \
+  --o-visualization ancom-Era_vic.qzv
+ 
+
+qiime composition ancom \
+  --i-table comp-samples_hdf5_QIIME2_decontam_2FreqFilter_Victoria.qza \
+  --m-metadata-file samples-metadata.txt \
+  --m-metadata-column 'depth' \
+  --o-visualization ancom-depth_vic.qzv
+
+qiime composition ancom \
+  --i-table comp-samples_hdf5_QIIME2_decontam_2FreqFilter_Victoria.qza \
+  --m-metadata-file samples-metadata.txt \
+  --m-metadata-column 'fragment_size' \
+  --o-visualization ancom-fragment_size_vic.qzv
+
+############### THE END ################
